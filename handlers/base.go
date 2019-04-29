@@ -1,9 +1,9 @@
 package handlers
 
 import (
+	"integration/bot"
+	"integration/oauth"
 	"net/http"
-	"oauth2-example/bot"
-	"oauth2-example/oauth"
 )
 
 func New() http.Handler {

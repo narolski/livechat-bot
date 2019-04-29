@@ -2,9 +2,9 @@ package main
 
 import (
 	"fmt"
+	"integration/handlers"
 	"log"
 	"net/http"
-	"oauth2-example/handlers"
 )
 
 func main() {

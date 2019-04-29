@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"integration/oauth"
 	"io/ioutil"
 	"log"
 	"net/http"
-	"oauth2-example/oauth"
 )
 
 type Archives struct {
