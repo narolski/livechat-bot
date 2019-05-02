@@ -1,67 +1,90 @@
 package bot
 
 import (
-	"bytes"
 	"encoding/json"
-	"fmt"
-	"integration/oauth"
-	"io/ioutil"
 	"log"
 	"net/http"
+	"strings"
+
+	"github.com/gorilla/websocket"
 )
 
-type Archives struct {
-	Filters    string `json:"filters,omitempty"`
-	Pagination string `json:"pagination,omitempty"`
+var (
+	triggerWord string = "pizza"
+	botResponse string = "The pizza is on its' way!"
+)
+
+// StartBotAgent runs the bot agent by creating a websocket-based connection with LiveChat's Real Time Messaging API, listens for incoming messages and sends responses based on their content
+func StartBotAgent(w http.ResponseWriter, r *http.Request) {
+	log.Println("LiveChat Bot Agent Started")
+	apiConnect()
 }
 
-// getActiveThreads returns the active threads the authorized agent has access to
-func getActiveThreads() string {
-
-	service := "https://api.livechatinc.com/v3.0/agent/action/get_archives"
-	content_type := "application/json"
-	client := oauth.LiveChatAPIClient()
-
-	type protocolRequest struct {
-		Action    string      `json:"action"`
-		RequestID string      `json:"request_id,omitempty"`
-		Payload   interface{} `json:"payload"`
+// handleIncomingEvent performs appropriate actions according to the received event's details
+func botHandleIncomingEvent(c *websocket.Conn, raw []byte) error {
+	type incomingEventResponse struct {
+		ChatID   string `json:"chat_id"`
+		ThreadID string `json:"thread_id"`
+		Event    struct {
+			ID         string `json:"id"`
+			Order      int    `json:"order"`
+			Timestamp  int    `json:"timestamp"`
+			Recipients string `json:"recipients"`
+			Type       string `json:"type"`
+			Text       string `json:"text"`
+			AuthorID   string `json:"author_id"`
+		} `json:"event"`
 	}
 
-	pr := &protocolRequest{"get_archives", "", Archives{}}
+	// Parse the event details
+	response := &incomingEventResponse{}
+	json.Unmarshal([]byte(raw), response)
 
-	requestBody, err := json.Marshal(pr)
-
-	if err != nil {
-		log.Fatalln(err)
+	switch response.Event.Type {
+	// Add more cases here
+	case "message":
+		log.Println("Handling the incoming message:", response.Event.Text)
+		return botHandleIncomingMessage(c, response.Event.Text, response.ChatID, response.Event.AuthorID)
 	}
 
-	request, err := http.NewRequest("POST", service, bytes.NewBuffer(requestBody))
-
-	if err != nil {
-		log.Fatalln(err)
-	}
-
-	request.Header.Add("Content-Type", content_type)
-	request.Header.Add("Authorization", oauth.LiveChatToken.AccessToken)
-
-	response, err := client.Do(request)
-
-	if err != nil {
-		log.Fatalln(err)
-	}
-
-	defer response.Body.Close()
-
-	body, err := ioutil.ReadAll(response.Body)
-
-	if err != nil {
-		log.Fatalln(err)
-	}
-
-	return string(body)
+	return nil
 }
 
-func WriteResponse(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "Response: %s\n", getActiveThreads())
+// botHandleIncomingMessage checks the incoming chat message for a trigger word presence and delegates appropriate actions
+func botHandleIncomingMessage(c *websocket.Conn, message string, chatID string, authorID string) error {
+
+	if strings.Contains(message, triggerWord) && authorID != botAgentID {
+		// If the message contains bot's trigger word, send a defined response
+		log.Printf("Found messagee containing the trigger word '%s': '%s'", triggerWord, message)
+		botSendChatMessage(c, chatID, botResponse)
+	}
+
+	return nil
+}
+
+// botSendChatMessage sends the message string to a chat with a given
+func botSendChatMessage(c *websocket.Conn, chatID string, message string) error {
+	type event struct {
+		Type       string `json:"type"`
+		Text       string `json:"text"`
+		Recipients string `json:"recipients"`
+		AuthorID   string `json:"author_id"`
+	}
+
+	type sendEventRequest struct {
+		ChatID             string `json:"chat_id"`
+		AttachToLastThread bool   `json:"attach_to_last_thread"`
+		Event              *event `json:"event"`
+	}
+
+	payload := &sendEventRequest{
+		ChatID:             chatID,
+		AttachToLastThread: true,
+		Event: &event{
+			Type:       "message",
+			Text:       message,
+			Recipients: "all",
+		},
+	}
+	return apiSendRequest(c, "send_event", true, payload)
 }

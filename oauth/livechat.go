@@ -14,24 +14,18 @@ import (
 
 var LiveChatToken *oauth2.Token
 
-// Scopes: OAuth 2.0 scopes provide a way to limit the amount of access that is granted to an access token.
 var LiveChatOauthConfig = &oauth2.Config{
-	RedirectURL:  "http://e5fc0b6d.ngrok.io/callback",
+	RedirectURL:  "http://localhost:8000/callback",
 	ClientID:     "e65988fbff37b8cf03d661d4976fd213",
 	ClientSecret: "99e5d80080b1fc823fe5a852ed006ce8",
-	// Scopes:       []string{"https://www.LiveChatapis.com/auth/userinfo.email"},
 	Endpoint: oauth2.Endpoint{
 		AuthURL:  "https://accounts.livechatinc.com/",
 		TokenURL: "https://accounts.livechatinc.com/token",
 	},
-	Scopes: []string{"chats--all:rw"},
+	Scopes: []string{"chats--all:rw", "agents-bot--all:rw"},
 }
 
-const oauthLiveChatUrlAPI = "https://accounts.livechatinc.com/token"
-
 func OauthLiveChatLogin(w http.ResponseWriter, r *http.Request) {
-
-	fmt.Println("Handling the login...")
 
 	// Create oauthState cookie (random state)
 	oauthState := generateStateOauthCookie(w)
@@ -101,7 +95,7 @@ func getCredentialsFromCode(code string) (*oauth2.Token, error) {
 }
 
 // GetHTTPClient refreshes an access token if needed and returns a http.Client used for requests
-func LiveChatAPIClient() *http.Client {
+func GetLiveChatAPIToken() *oauth2.Token {
 	tokenSource := LiveChatOauthConfig.TokenSource(oauth2.NoContext, LiveChatToken)
 	newToken, err := tokenSource.Token()
 
@@ -114,7 +108,7 @@ func LiveChatAPIClient() *http.Client {
 		LiveChatToken = newToken
 	}
 
-	return oauth2.NewClient(oauth2.NoContext, tokenSource)
+	return LiveChatToken
 }
 
 func generateStateOauthCookie(w http.ResponseWriter) string {
