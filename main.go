@@ -8,16 +8,17 @@ import (
 )
 
 func main() {
-	// We create a simple server using http.Server and run.
+	// Creates a simple HTTP server used for the demo purpouses
 	server := &http.Server{
 		Addr:    fmt.Sprintf(":8000"),
 		Handler: handlers.New(),
 	}
 
-	log.Printf("Starting HTTP Server. Listening at %q", server.Addr)
+	log.Printf("Starting the HTTP Server at port %q", server.Addr)
+
 	if err := server.ListenAndServe(); err != http.ErrServerClosed {
 		log.Printf("%v", err)
 	} else {
-		log.Println("Server closed!")
+		log.Println("Server closed.")
 	}
 }

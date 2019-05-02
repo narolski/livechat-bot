@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"path"
 	"strings"
+	"text/template"
 
 	"github.com/gorilla/websocket"
 )
@@ -16,8 +18,21 @@ var (
 
 // StartBotAgent runs the bot agent by creating a websocket-based connection with LiveChat's Real Time Messaging API, listens for incoming messages and sends responses based on their content
 func StartBotAgent(w http.ResponseWriter, r *http.Request) {
-	log.Println("LiveChat Bot Agent Started")
-	apiConnect()
+	lp := path.Join("templates", "bot.html")
+
+	tmpl, err := template.ParseFiles(lp)
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Run the websocket-based connection to the API
+	go apiConnect()
+
+	if err := tmpl.Execute(w, nil); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }
 
 // handleIncomingEvent performs appropriate actions according to the received event's details

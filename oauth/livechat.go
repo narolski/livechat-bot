@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
-	"fmt"
 	"log"
 	"net/http"
 	"time"
@@ -12,8 +11,7 @@ import (
 	"golang.org/x/oauth2"
 )
 
-var LiveChatToken *oauth2.Token
-
+// Stores the OAuth2 configuration
 var LiveChatOauthConfig = &oauth2.Config{
 	RedirectURL:  "http://localhost:8000/callback",
 	ClientID:     "e65988fbff37b8cf03d661d4976fd213",
@@ -25,93 +23,98 @@ var LiveChatOauthConfig = &oauth2.Config{
 	Scopes: []string{"chats--all:rw", "agents-bot--all:rw"},
 }
 
-func OauthLiveChatLogin(w http.ResponseWriter, r *http.Request) {
+// Stores the valid authentication token
+var LiveChatToken *oauth2.Token
 
-	// Create oauthState cookie (random state)
-	oauthState := generateStateOauthCookie(w)
+// OAuthLiveChatLogin handles redirection to the LiveChat's login page where an authorization code is generated
+func OAuthLiveChatLogin(w http.ResponseWriter, r *http.Request) {
 
-	/*
-		AuthCodeURL receive state that is a token to protect the user from CSRF attacks. You must always provide a non-empty string and
-		validate that it matches the the state query parameter on your redirect callback.
-	*/
+	// Creates OAuth2 state cookie which is used to protect against the CSRF attacks
+	oauthState := generateStateOAuthCookie(w)
+
+	// Creates an URL to which the redirection will be performed
 	url := LiveChatOauthConfig.AuthCodeURL(oauthState, oauth2.AccessTypeOnline)
 
-	fmt.Println("The AuthCodeURL is: ", url)
-
+	log.Printf("Handling login. The AuthCodeURL is: %s", url)
 	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
 }
 
-func OauthLiveChatCallback(w http.ResponseWriter, r *http.Request) {
+// OAuthLiveChatCallback handles the response from the LiveChat's SSO containing the access token
+// It converts the received authorization code to an access token, which will be used to authenticate the API calls
+func OAuthLiveChatCallback(w http.ResponseWriter, r *http.Request) {
 
-	fmt.Println("Handling the callback...")
-
-	// Read oauthState from Cookie
+	// Get the OAuth2 state value
 	oauthState, err := r.Cookie("oauthstate")
 
-	// Read oauthstate not from cookie
-	// oauthState := r.FormValue("oauthstate")
-
-	// fmt.Println("oauthstate is: ", oauthState)
-
 	if err != nil {
-		fmt.Println("Error when reading oauth state: ", err)
+		log.Fatalln("Error when reading oauth state: ", err.Error())
 	}
 
-	// Verify that the state value is correct
+	// Verify the state value
 	if r.FormValue("state") != oauthState.Value {
-		log.Println("invalid oauth LiveChat state")
+		log.Println("Invalid OAuth2 state value. Redirecting to login page...")
 		http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
 		return
 	}
 
-	// Swap the code for the access token
-	tokenData, err := getCredentialsFromCode(r.FormValue("code"))
+	// Use the authorization code to get the access token
+	tokenData, err := getAccessTokenFromAuthorizatonCode(r.FormValue("code"))
 	if err != nil {
-		log.Println(err.Error())
+		log.Printf("Error when getting the access token: %s. Redirecting to login page...", err)
 		http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
 		return
 	}
 
-	// Update the token
-	LiveChatToken = tokenData
+	// Set the authentication token
+	setLiveChatToken(tokenData)
 
-	// GetOrCreate User in your db.
-	// Redirect or response with a token.
-	// More code .....
-	fmt.Fprintf(w, "UserInfo: %s\n", tokenData)
+	// Redirect to the "bot" page
+	http.Redirect(w, r, "/bot", http.StatusTemporaryRedirect)
+	return
 }
 
-func getCredentialsFromCode(code string) (*oauth2.Token, error) {
-	// Use the code to get the access_token and refresh_token from LiveChat.
-
+// getAccessTokenFromAuthorizatonCode converts the received authentication code into a access token and a refresh token used to obtain a new, valid pair should an old one pass its' expiration period
+func getAccessTokenFromAuthorizatonCode(code string) (*oauth2.Token, error) {
 	// Converts an authorization code into a access_token
 	token, err := LiveChatOauthConfig.Exchange(context.Background(), code)
 
 	if err != nil {
-		return nil, fmt.Errorf("Code exchange error: %s", err.Error())
+		log.Fatalln("Code exchange error:", err.Error())
 	}
 
 	return token, nil
 }
 
-// GetHTTPClient refreshes an access token if needed and returns a http.Client used for requests
+// getLiveChatToken returns the currently held access token
+func getLiveChatToken() *oauth2.Token {
+	return LiveChatToken
+}
+
+// setLiveChatToken updates the currently held access token to a new value
+func setLiveChatToken(token *oauth2.Token) {
+	LiveChatToken = token
+}
+
+// GetLiveChatAPIToken returns a valid access token, performing an access token refresh if necessary
 func GetLiveChatAPIToken() *oauth2.Token {
-	tokenSource := LiveChatOauthConfig.TokenSource(oauth2.NoContext, LiveChatToken)
+	tokenSource := LiveChatOauthConfig.TokenSource(oauth2.NoContext, getLiveChatToken())
 	newToken, err := tokenSource.Token()
 
 	if err != nil {
-		log.Fatalln(err)
+		log.Fatalln("Unable to validate/refresh the token:", err.Error())
 	}
 
 	if newToken.AccessToken != LiveChatToken.AccessToken {
-		// Update the token
-		LiveChatToken = newToken
+		// Update the token value stored
+		setLiveChatToken(newToken)
 	}
 
 	return LiveChatToken
 }
 
-func generateStateOauthCookie(w http.ResponseWriter) string {
+// generateStateOauthCookie generates a random state OAuth cookie
+// Note that this might not be secure and should be used only for the testing purpouses
+func generateStateOAuthCookie(w http.ResponseWriter) string {
 	var expiration = time.Now().Add(20 * time.Minute)
 
 	b := make([]byte, 16)

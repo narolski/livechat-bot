@@ -8,12 +8,15 @@ import (
 
 func New() http.Handler {
 	mux := http.NewServeMux()
-	// Root
+
+	// Static Home
 	mux.Handle("/", http.FileServer(http.Dir("templates/")))
 
-	// OauthLiveChat
-	mux.HandleFunc("/login", oauth.OauthLiveChatLogin)
-	mux.HandleFunc("/callback", oauth.OauthLiveChatCallback)
+	// OAuth
+	mux.HandleFunc("/login", oauth.OAuthLiveChatLogin)
+	mux.HandleFunc("/callback", oauth.OAuthLiveChatCallback)
+
+	// Bot
 	mux.HandleFunc("/bot", bot.StartBotAgent)
 
 	return mux
