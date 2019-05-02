@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <meta name="description" content="LiveChat Bot Example">
     <meta name="author" content="Paweł Narolski">
-    <title>Bot Running - LiveChat Bot Example</title>
+    <title>LiveChat Bot Example</title>
 
     <link rel="canonical" href="https://getbootstrap.com/docs/4.3/examples/navbar-static/">
 
@@ -28,8 +28,15 @@
 
     <main role="main" class="container">
         <div class="jumbotron">
-            <h1>LiveChat Bot Example is running</h1>
-            <p class="lead">The bot is currently running. Check the console for the detailed log...</p>
+            <h1>Authorization Token</h1>
+            <p class="lead">Copy the authorization token listed below and use it to create a new, custom Bot Agent using the Configuration API.</p>
+            <p class="lead">After creating the Bot Agent, copy its' ID into <i>bot/bot.go</i>, configure the trigger word, response phrase and click the button below to start the bot!</p>
+            <ul class="lead">
+                <li>Authorization token: {{.AuthorizationToken}}</li>
+            </ul>
+
+            <a class="btn btn-lg btn-primary" href="/bot" role="button">Login via LiveChat and Run
+                &raquo;</a>
         </div>
     </main>
     <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"

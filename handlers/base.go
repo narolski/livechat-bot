@@ -15,6 +15,7 @@ func New() http.Handler {
 	// OAuth
 	mux.HandleFunc("/login", oauth.OAuthLiveChatLogin)
 	mux.HandleFunc("/callback", oauth.OAuthLiveChatCallback)
+	mux.HandleFunc("/token", oauth.ShowOAuthToken)
 
 	// Bot
 	mux.HandleFunc("/bot", bot.StartBotAgent)

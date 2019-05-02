@@ -2,6 +2,7 @@ package bot
 
 import (
 	"encoding/json"
+	"integration/oauth"
 	"log"
 	"net/http"
 	"path"
@@ -12,14 +13,21 @@ import (
 )
 
 var (
+	botAgentID  string = "d5b2377faebc9c5aef9a2bdc40bf7510"
 	triggerWord string = "pizza"
 	botResponse string = "The pizza is on its' way!"
 )
 
 // StartBotAgent runs the bot agent by creating a websocket-based connection with LiveChat's Real Time Messaging API, listens for incoming messages and sends responses based on their content
 func StartBotAgent(w http.ResponseWriter, r *http.Request) {
-	lp := path.Join("templates", "bot.html")
 
+	// Verify that the access token is present
+	if !oauth.HasLiveChatToken() {
+		http.Error(w, "No token present", http.StatusInternalServerError)
+		return
+	}
+
+	lp := path.Join("templates", "bot.html")
 	tmpl, err := template.ParseFiles(lp)
 
 	if err != nil {
@@ -32,6 +40,7 @@ func StartBotAgent(w http.ResponseWriter, r *http.Request) {
 
 	if err := tmpl.Execute(w, nil); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 }
 
