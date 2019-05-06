@@ -13,6 +13,8 @@ You will learn how to:
 2. Create a custom Bot Agent using the *LiveChat Configuration API*
 3. Set-up a websocket-based connection with the *LiveChat Real-Time Messaging API *to receive and send events to the chats which you have the access to
 
+It should take you no more than **30 minutes** to go through this entire tutorial.
+
 ## Getting started
 
 To start, [create a LiveChat account](https://www.livechatinc.com/signup/?source_id=header_cta&source_url=https://www.livechatinc.com/&source_type=website) if you don't already have one.
