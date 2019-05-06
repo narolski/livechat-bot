@@ -16,8 +16,8 @@ import (
 // Stores the OAuth2 configuration
 var LiveChatOAuthConfig = &oauth2.Config{
 	RedirectURL:  "http://localhost:8000/callback",
-	ClientID:     "e65988fbff37b8cf03d661d4976fd213",
-	ClientSecret: "99e5d80080b1fc823fe5a852ed006ce8",
+	ClientID:     "<YOUR CLIENT ID>",
+	ClientSecret: "<YOUR CLIENT SECRET>",
 	Endpoint: oauth2.Endpoint{
 		AuthURL:  "https://accounts.livechatinc.com/",
 		TokenURL: "https://accounts.livechatinc.com/token",

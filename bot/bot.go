@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	botAgentID  string = "d5b2377faebc9c5aef9a2bdc40bf7510"
+	botAgentID  string = "<YOUR BOT AGENT ID>"
 	triggerWord string = "pizza"
 	botResponse string = "The pizza is on its' way!"
 )
