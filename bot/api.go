@@ -13,7 +13,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-var (
+const (
 	agentChatAPIURL string        = "wss://api.livechatinc.com/v3.0/agent/rtm/ws"
 	pingInterval    time.Duration = 15 * time.Second
 )
@@ -67,7 +67,6 @@ func apiLogin(c *websocket.Conn) error {
 
 	// Get the access token
 	token := "Bearer " + oauth.GetLiveChatAPIToken().AccessToken
-	// token := "Bearer dal:gaJD246dSRCJ-LgZDPOtRg"
 
 	payload := &loginRequest{
 		Token: token,

@@ -2,14 +2,16 @@
 
 Have you ever wanted to write your own LiveChat integration, but didn't know where to start? Well, you've found the right place!
 
-By following this tutorial you will create your very own LiveChat Integration - a basic bot that will respond to a predefined trigger by sending its' own custom message. How cool is that?
+![sample](/readme/5.png "sample")
+
+By following this tutorial you will create your very own LiveChat integration - a basic bot that will respond to a predefined trigger by sending its' own custom message. How cool is that?
 
 ## What you will learn from this tutorial
 
 You will learn how to:
-1. Obtain the access token used to authenticate API calls from OAuth2-based LiveChat SSO Server
-2. Create a custom Bot Agent using the LiveChat Configuration API
-3. Set-up a websocket-based connection with the LiveChat Real-Time Messaging API to receive and send events to the chats which you have the access to
+1. Obtain the access token used to authenticate API calls from OAuth2-based *LiveChat SSO Server*
+2. Create a custom Bot Agent using the *LiveChat Configuration API*
+3. Set-up a websocket-based connection with the *LiveChat Real-Time Messaging API *to receive and send events to the chats which you have the access to
 
 ## Getting started
 
@@ -129,9 +131,11 @@ The previously generated *access token* needed to create a *Bot Agent* will be s
 
 ![authorization token](/readme/2.png "Authorization token")
 
+Make sure that no one unauthorized has access to this token!
+
 To create a *Bot Agent*, send a `POST` request to `api.livechatinc.com/configuration/agents/create_bot_agent`. An example request made via `cURL`:
 
-```cURL
+```JSON
 curl -X POST \
   https://api.livechatinc.com/configuration/agents/create_bot_agent \
   -H 'Content-Type: application/json' \
@@ -147,7 +151,7 @@ Make sure that the `content-type` is set to `application/json` and the correct *
 
 You can see the detailed documentation and payload examples at the [ Configuration API](https://developers.livechatinc.com/beta-docs/configuration-api/#bot-agent) documentation page. For our purpouses, a request body can be set to:
 
-```
+```json
 {
     "name": "<YOUR BOT NAME>",
     "status": "not accepting chats"
@@ -156,7 +160,7 @@ You can see the detailed documentation and payload examples at the [ Configurati
 Setting the bot's `status` to `not accepting chats` means that the LiveChat's chat router will not treat is as one of the agents logged in to the account and will not pass the messages from the customers to the bot to respond. It will, however, allow us to join chats and write new messages to them.
 
 If everything goes well, you will get a response with the created *Bot Agent's* `ID`:
-```
+```json
 {
     "bot_agent_id": "<YOUR BOT AGENT ID>"
 }
@@ -167,4 +171,298 @@ Don't click that shiny *Run the Bot* button just yet, though!
 
 ## Creating a Bot
 
-It's high time we coded our bot! To make it work smoothly, we will use the LiveChat [Real Time Messaging API](https://developers.livechatinc.com/beta-docs/agent-chat-api/#real-time-messaging-api) which is a part of the Agent Chat API. 
+It's high time we coded our bot! To make it work smoothly, we will use the LiveChat [Real-Time Messaging API](https://developers.livechatinc.com/beta-docs/agent-chat-api/#real-time-messaging-api) which is a part of the *Agent Chat API*. 
+
+The *Real-Time Messaging API* is based on a websocket connection. We will use it to read all messages arriving to our account. 
+
+The `bot` package is divided into two files: `api.go` and `bot.go`. In the first one you will find methods responsible for running and maintaining the connection to the *RTM API*, as well as sending requests. The second one defines the bot's logic.
+
+### Connection to the API
+
+A websocket connection will be handled through the `gorilla/websocket` library. 
+
+We start by defining the `agentChatAPIURL` and a `pingInterval`, which the *RTM API* requires to be no longer than once every 15 seconds:
+
+```Go
+const (
+	agentChatAPIURL string = "wss://api.livechatinc.com/v3.0/agent/rtm/ws"
+	pingInterval time.Duration = 15 * time.Second
+)
+```
+
+Then an `apiConnect` method is defined, which is responsible for creating a connection and handling the incoming events from the *RTM API*:
+
+```Go
+// connect creates and maintains the websocket connection with LiveChat's RTM API
+func apiConnect() {
+	// Set up the connection
+	c, _, err := websocket.DefaultDialer.Dial(agentChatAPIURL, nil)
+
+	if err != nil {
+		log.Fatalln("Error when dialing websocket: ", err)
+	}
+	defer c.Close()
+
+	// Start the pinger, which will ping the service at a set interval in order to keep the connection open
+	go apiPinger(c)
+
+	// Login to the API through access token
+	if err := apiLogin(c); err != nil {
+		log.Fatalln("Error when authenticating: ", err)
+	}
+
+	for {
+		_, raw, err := c.ReadMessage()
+		if err != nil {
+			log.Fatalf("API read message error: %s", err)
+		}
+
+		if err := apiHandleMessage(c, raw); err != nil {
+			log.Fatalf("API handle message error: %s", err)
+		}
+	}
+}
+```
+
+It also starts a `apiPinger` method concurrently, which will make sure the connection is not closed prematurely:
+
+```Go
+// pinger pings the server at a given time interval in order to maintain the websocket connection
+func apiPinger(c *websocket.Conn) {
+	t := time.NewTimer(pingInterval)
+
+	for {
+		<-t.C
+		c.WriteMessage(websocket.PingMessage, []byte{})
+		t.Reset(pingInterval)
+	}
+}
+```
+
+The `apiLogin` method handles the authentication using the previously obtained *access token*:
+
+```Go
+// apiLogin handles the user authentication using the generated token k
+func apiLogin(c *websocket.Conn) error {
+	type loginRequest struct {
+		Token string `json:"token"`
+	}
+
+	// Get the access token
+	token := "Bearer " + oauth.GetLiveChatAPIToken().AccessToken
+
+	payload := &loginRequest{
+		Token: token,
+	}
+	return apiSendRequest(c, "login", false, payload)
+}
+```
+After a successful authentication the `apiConnect` enters a loop, reading incoming messages and passing them to the `apiHandleMessageMethod`:
+
+```Go
+// apiHandleMessage reads the details of the protocol responses and performs defined actions
+func apiHandleMessage(c *websocket.Conn, raw []byte) error {
+	type protocolResponse struct {
+		RequestID string          `json:"request_id,omitempty"`
+		Action    string          `json:"action"`
+		Type      string          `json:"type"`
+		Payload   json.RawMessage `json:"payload"`
+		Success   *bool           `json:"success"`
+	}
+
+	log.Printf("API Message received: %s", raw)
+
+	msg := &protocolResponse{}
+	if err := json.Unmarshal(raw, msg); err != nil {
+		return err
+	}
+
+	// log.Printf("API message understood as: %s", msg)
+
+	if msg.Success != nil && !*msg.Success {
+		return errors.New(fmt.Sprintf("Message %s failed", msg.Action))
+	}
+
+	// Handle different API message types through the response's action
+	switch msg.Action {
+	// Add more cases here
+	case "incoming_event":
+		return botHandleIncomingEvent(c, msg.Payload)
+	}
+
+	return nil
+}
+```
+`apiHandleMessage` reads the basic details about the message from *RTM API*, such as its' `action` parameter and calls bot to perform actions appropriately. 
+
+Here, upon the arrival of `incoming_event` message the bot's `botHandleIncomingEvent` method is invoked with the message's payload passed.
+
+Finally, `apiSendRequest` method receives the `payload` from the bot and makes a request to the *RTM API*:
+
+```Go
+// apiSendRequest makes the request to the API
+func apiSendRequest(c *websocket.Conn, action string, asBot bool, payload interface{}) error {
+	type protocolRequest struct {
+		Action    string      `json:"action"`
+		RequestID string      `json:"request_id"`
+		Payload   interface{} `json:"payload"`
+		AuthorID  string      `json:"author_id"`
+	}
+
+	msg := protocolRequest{
+		Action:    action,
+		RequestID: strconv.Itoa(rand.Int()),
+		Payload:   payload,
+	}
+
+	if asBot {
+		// Send the message as a bot agent instead of the authenticated user's agent
+		msg.AuthorID = botAgentID
+	}
+
+	raw, err := json.Marshal(msg)
+	if err != nil {
+		return err
+	}
+
+	if err := c.WriteMessage(websocket.TextMessage, raw); err != nil {
+		return err
+	}
+
+	log.Printf("API message sent: %s", raw)
+	return nil
+}
+
+```
+
+### Defining Bot Actions
+
+The bot actions are defined by methods found in `bot/bot.go` file.
+
+To start with, check whether the `botAgentID` contains a correct *Bot Agent ID*. Then, define your custom bot `triggerWord` and `botResponse`:
+
+```Go
+const (
+	botAgentID  string = "<BOT AGENT ID>"
+	triggerWord string = "pizza" // Sample trigger, response
+	botResponse string = "The pizza is on its' way!"
+)
+```
+
+The bot works like this:
+- upon the arrival of the `incoming_event` (an object containing the message) check if the message has the `triggerWord` in it
+- if `triggerWord` is found in a message, respond to the current thread by sending a message with predefined `botResponse`
+
+Bot is started through the `StartBotAgent` method which checks for the presence of the *access token*, runs the `apiConnect` concurrently and renders the status page below:
+
+![status](/readme/4.png "status page")
+
+```Go
+// StartBotAgent runs the bot agent by creating a websocket-based connection with LiveChat's Real Time Messaging API, listens for incoming messages and sends responses based on their content
+func StartBotAgent(w http.ResponseWriter, r *http.Request) {
+
+	// Verify that the access token is present
+	if !oauth.HasLiveChatToken() {
+		http.Error(w, "No token present", http.StatusInternalServerError)
+		return
+	}
+
+	lp := path.Join("templates", "bot.html")
+	tmpl, err := template.ParseFiles(lp)
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Run the websocket-based connection to the API
+	go apiConnect()
+
+	if err := tmpl.Execute(w, nil); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+}
+```
+
+Upon an incoming event arrival the method `botHandleIncomingEvent` checks whether the event is of type message and if so, passes it to `botHandleIncomingMessage` method:
+
+```Go
+// handleIncomingEvent performs appropriate actions according to the received event's details
+func botHandleIncomingEvent(c *websocket.Conn, raw []byte) error {
+	type incomingEventResponse struct {
+		ChatID   string `json:"chat_id"`
+		ThreadID string `json:"thread_id"`
+		Event    struct {
+			ID         string `json:"id"`
+			Order      int    `json:"order"`
+			Timestamp  int    `json:"timestamp"`
+			Recipients string `json:"recipients"`
+			Type       string `json:"type"`
+			Text       string `json:"text"`
+			AuthorID   string `json:"author_id"`
+		} `json:"event"`
+	}
+
+	// Parse the event details
+	response := &incomingEventResponse{}
+	json.Unmarshal([]byte(raw), response)
+
+	switch response.Event.Type {
+	// Add more cases here
+	case "message":
+		log.Println("Handling the incoming message:", response.Event.Text)
+		return botHandleIncomingMessage(c, response.Event.Text, response.ChatID, response.Event.AuthorID)
+	}
+
+	return nil
+}
+```
+
+`botHandleIncomingMessage` performs a `triggerWord` check through use of a `strings.Contains` method. 
+
+When a trigger word is present in the message, `botSendChatMessage` method is called with the `botResponse` passed as a message contents, and `chatID` as the ID of chat where the message should be sent:
+
+```Go
+// botSendChatMessage sends the message string to a chat with a given
+func botSendChatMessage(c *websocket.Conn, chatID string, message string) error {
+	type event struct {
+		Type       string `json:"type"`
+		Text       string `json:"text"`
+		Recipients string `json:"recipients"`
+		AuthorID   string `json:"author_id"`
+	}
+
+	type sendEventRequest struct {
+		ChatID             string `json:"chat_id"`
+		AttachToLastThread bool   `json:"attach_to_last_thread"`
+		Event              *event `json:"event"`
+	}
+
+	payload := &sendEventRequest{
+		ChatID:             chatID,
+		AttachToLastThread: true,
+		Event: &event{
+			Type:       "message",
+			Text:       message,
+			Recipients: "all",
+		},
+	}
+	return apiSendRequest(c, "send_event", true, payload)
+}
+```
+
+The sent message is automatically attached to the last thread in a chat by setting the `AttachToLastThread` flag in the request's `payload` to `true`.
+
+## Summary
+
+By now you should be familiar with:
+
+- how does the API calls authentication work using the OAuth2 *access tokens*
+- how to make authenticated calls to the external API, such as *LiveChat Configuration API*
+- how to set-up a websocket-based connection with the external service, such as *LiveChat RTM API*
+- how to receive and send events through a websocket-based connection
+
+We hope that you've found this lesson enjoyable and can't wait to see what you come up with thanks to our extensive API!
+
+Be sure to check out the [full documentation](https://developers.livechatinc.com/beta-docs/) to see what can be done next.
