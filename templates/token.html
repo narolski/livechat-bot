@@ -28,14 +28,14 @@
 
     <main role="main" class="container">
         <div class="jumbotron">
-            <h1>Authorization Token</h1>
-            <p class="lead">Copy the authorization token listed below and use it to create a new, custom Bot Agent using the Configuration API.</p>
+            <h1>Access Token</h1>
+            <p class="lead">Copy the access token listed below and use it to create a new, custom Bot Agent using the Configuration API.</p>
             <p class="lead">After creating the Bot Agent, copy its' ID into <i>bot/bot.go</i>, configure the trigger word, response phrase and click the button below to start the bot!</p>
             <ul class="lead">
-                <li>Authorization token: {{.AuthorizationToken}}</li>
+                <li>Access token: {{.AccessToken}}</li>
             </ul>
 
-            <a class="btn btn-lg btn-primary" href="/bot" role="button">Login via LiveChat and Run
+            <a class="btn btn-lg btn-primary" href="/bot" role="button">Run your Bot
                 &raquo;</a>
         </div>
     </main>

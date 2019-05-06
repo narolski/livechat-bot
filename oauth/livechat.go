@@ -139,7 +139,7 @@ func generateStateOAuthCookie(w http.ResponseWriter) string {
 // ShowOAuthToken renders a page with a current valid oauth token
 func ShowOAuthToken(w http.ResponseWriter, r *http.Request) {
 	type pageData struct {
-		AuthorizationToken string
+		AccessToken string
 	}
 
 	if !HasLiveChatToken() {
@@ -148,7 +148,7 @@ func ShowOAuthToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := pageData{
-		AuthorizationToken: getLiveChatToken().AccessToken,
+		AccessToken: getLiveChatToken().AccessToken,
 	}
 
 	lp := path.Join("templates", "token.html")
